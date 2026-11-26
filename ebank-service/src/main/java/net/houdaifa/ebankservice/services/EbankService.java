@@ -1,7 +1,11 @@
 package net.houdaifa.ebankservice.services;
 
 import net.houdaifa.ebankservice.entities.BankAccount;
+import net.houdaifa.ebankservice.feign.CustomerRestClient;
+import net.houdaifa.ebankservice.model.Customer;
 import net.houdaifa.ebankservice.repository.BankAccountRepository;
+import org.springframework.ai.mcp.annotation.McpTool;
+import org.springframework.ai.mcp.annotation.McpToolParam;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
@@ -11,23 +15,37 @@ import java.util.UUID;
 @Service
 public class EbankService {
     private BankAccountRepository accountRepository;
+    private CustomerRestClient customerRestClient;
 
-    public EbankService(BankAccountRepository accountRepository){
+    public EbankService(BankAccountRepository accountRepository, CustomerRestClient customerRestClient){
         this.accountRepository = accountRepository;
+        this.customerRestClient = customerRestClient;
     }
 
+    @McpTool(description = "Get all bank accounts")
     public List<BankAccount> getAllBankAccounts(){
         return accountRepository.findAll();
     }
 
-    public BankAccount getAccountById(String id){
-        return accountRepository.findById(id)
+    @McpTool(description = "Get a bank account by id")
+    public BankAccount getAccountById(@McpToolParam(description = "The back account id") String id){
+        BankAccount bankAccount = accountRepository.findById(id)
                 .orElseThrow(()->new RuntimeException("Account not found"));
+        bankAccount.setCustomer(customerRestClient.getCustomerById(bankAccount.getCustomerId()));
+        return bankAccount;
+
     }
 
-    public BankAccount save(BankAccount bankAccount){
-        bankAccount.setId(UUID.randomUUID().toString());
-        bankAccount.setCreatedAt(new Date());
-        return accountRepository.save(bankAccount);
+    @McpTool(description = "Save a new bank account")
+    public BankAccount save(@McpToolParam(description = "The bank account to save (balance, type, customerId) ") BankAccount bankAccount){
+        try {
+            Customer customer = customerRestClient.getCustomerById(bankAccount.getCustomerId());
+            bankAccount.setId(UUID.randomUUID().toString());
+            bankAccount.setCreatedAt(new Date());
+            return accountRepository.save(bankAccount);
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage());
+        }
+
     }
 }
